@@ -1,0 +1,43 @@
+// schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Device {
+  id                 String       @id @default(uuid())
+  si_no              Int          @unique
+  tid                String       @unique
+  serial_number      String       @unique
+  sim                String?
+  status             DeviceStatus @default(AVAILABLE)
+  provisioned_at     DateTime?
+  provisioned_location String?
+  provisioned_by     String?
+  merchant_id        String?      // Optional field (allow null)
+  merchant           Merchant?    @relation(fields: [merchant_id], references: [id])
+  merchant_emirate   String?
+  tms_profile        String?
+  handover_to        String?
+  handover_date      DateTime?
+}
+
+model Merchant {
+  id         String    @id @default(uuid())
+  name       String
+  emirate    String
+  devices    Device[]
+  created_at DateTime  @default(now())
+}
+
+enum DeviceStatus {
+  AVAILABLE
+  PROVISIONED
+  FAULTY
+  REASSIGNED
+}

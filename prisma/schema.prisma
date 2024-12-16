@@ -25,6 +25,10 @@ model Device {
   tms_profile        String?
   handover_to        String?
   handover_date      DateTime?
+  replacement_for    String?      @unique // ID of device being replaced
+  replacement        Device?      @relation("Replacement", fields: [replacement_for], references: [id])
+  replaced_by        Device?      @relation("Replacement")
+  replacement_type   ReplacementType?
 }
 
 model Merchant {
@@ -40,4 +44,9 @@ enum DeviceStatus {
   PROVISIONED
   FAULTY
   REASSIGNED
+}
+
+enum ReplacementType {
+  GREEN_FIELD
+  REPLACEMENT
 }

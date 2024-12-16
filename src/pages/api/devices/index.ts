@@ -1,10 +1,17 @@
 // pages/api/devices/index.ts
+// Device API endpoints for managing device lifecycle
+// Handles CRUD operations for devices with status: AVAILABLE, PROVISIONED, FAULTY, REASSIGNED
+// Supports device replacement tracking and merchant assignment
 
+import { NextApiRequest, NextApiResponse } from 'next'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-export default async function handler(req, res) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   try {
     switch (req.method) {
       case 'GET':
@@ -16,30 +23,34 @@ export default async function handler(req, res) {
       case 'DELETE':
         return await deleteDevice(req, res)
       default:
-        res.status(405).json({ message: 'Method not allowed' })
+        return res.status(405).json({ message: 'Method not allowed' })
     }
   } catch (error) {
-    console.error('Handler Error:', error.message || error)
-    res
-      .status(500)
-      .json({ message: 'Internal server error', error: error.message })
+    console.error(
+      'Handler Error:',
+      error instanceof Error ? error.message : error
+    )
+    return res.status(500).json({
+      message: 'Internal server error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
   } finally {
     await prisma.$disconnect()
   }
 }
 
-async function getDevices(req, res) {
+async function getDevices(req: NextApiRequest, res: NextApiResponse) {
   try {
     const { page = '1', limit = '10', status, merchant_id, search } = req.query
-    const pageNum = parseInt(page, 10)
-    const limitNum = parseInt(limit, 10)
+    const pageNum = parseInt(page as string, 10)
+    const limitNum = parseInt(limit as string, 10)
 
     if (isNaN(pageNum) || isNaN(limitNum) || pageNum < 1 || limitNum < 1) {
       return res.status(400).json({ message: 'Invalid page or limit value' })
     }
 
     const skip = (pageNum - 1) * limitNum
-    let filter: any = {}
+    const filter: any = {}
     if (status) {
       filter.status = status
     }
@@ -48,52 +59,56 @@ async function getDevices(req, res) {
     }
     if (search) {
       filter.OR = [
-        { tid: { contains: search, mode: 'insensitive' } },
-        { serial_number: { contains: search, mode: 'insensitive' } },
-        { sim: { contains: search, mode: 'insensitive' } },
+        { tid: { contains: search as string, mode: 'insensitive' } },
+        { serial_number: { contains: search as string, mode: 'insensitive' } },
+        { sim: { contains: search as string, mode: 'insensitive' } },
       ]
     }
 
-    const devices = await prisma.device.findMany({
-      where: filter,
-      skip,
-      take: limitNum,
-      include: {
-        merchant: {
-          select: {
-            name: true,
-            emirate: true,
+    const [devices, totalDevices] = await Promise.all([
+      prisma.device.findMany({
+        where: filter,
+        skip,
+        take: limitNum,
+        include: {
+          merchant: {
+            select: {
+              name: true,
+              emirate: true,
+            },
           },
         },
-      },
-      orderBy: {
-        si_no: 'asc',
-      },
-    })
+        orderBy: {
+          si_no: 'asc',
+        },
+      }),
+      prisma.device.count({ where: filter }),
+    ])
 
-    const totalDevices = await prisma.device.count({ where: filter })
     const totalPages = Math.ceil(totalDevices / limitNum)
 
-    const paginationInfo = {
-      currentPage: pageNum,
-      totalPages,
-      totalItems: totalDevices,
-      itemsPerPage: limitNum,
-    }
-
-    res.status(200).json({
+    return res.status(200).json({
       devices,
-      pagination: paginationInfo,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalItems: totalDevices,
+        itemsPerPage: limitNum,
+      },
     })
   } catch (error) {
-    console.error('Error fetching devices:', error.message || error)
-    res
-      .status(500)
-      .json({ message: 'Failed to fetch devices', error: error.message })
+    console.error(
+      'Error fetching devices:',
+      error instanceof Error ? error.message : error
+    )
+    return res.status(500).json({
+      message: 'Failed to fetch devices',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
   }
 }
 
-async function createDevice(req, res) {
+async function createDevice(req: NextApiRequest, res: NextApiResponse) {
   const {
     si_no,
     tid,
@@ -109,6 +124,12 @@ async function createDevice(req, res) {
     handover_to,
     handover_date,
   } = req.body
+
+  if (!tid || !serial_number) {
+    return res.status(400).json({
+      message: 'TID and Serial Number are required',
+    })
+  }
 
   try {
     const newDevice = await prisma.device.create({
@@ -129,18 +150,28 @@ async function createDevice(req, res) {
       },
     })
 
-    res
-      .status(201)
-      .json({ message: 'Device created successfully', device: newDevice })
+    return res.status(201).json({
+      message: 'Device created successfully',
+      device: newDevice,
+    })
   } catch (error) {
-    console.error('Error creating device:', error.message || error)
-    res
-      .status(500)
-      .json({ message: 'Failed to create device', error: error.message })
+    if (error instanceof Error && error.message.includes('Unique constraint')) {
+      return res.status(409).json({
+        message: 'Device with this TID or Serial Number already exists',
+      })
+    }
+    console.error(
+      'Error creating device:',
+      error instanceof Error ? error.message : error
+    )
+    return res.status(500).json({
+      message: 'Failed to create device',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
   }
 }
 
-async function updateDevice(req, res) {
+async function updateDevice(req: NextApiRequest, res: NextApiResponse) {
   const {
     id,
     status,
@@ -155,6 +186,14 @@ async function updateDevice(req, res) {
   }
 
   try {
+    const existingDevice = await prisma.device.findUnique({
+      where: { id },
+    })
+
+    if (!existingDevice) {
+      return res.status(404).json({ message: 'Device not found' })
+    }
+
     const updatedDevice = await prisma.device.update({
       where: { id },
       data: {
@@ -166,18 +205,23 @@ async function updateDevice(req, res) {
       },
     })
 
-    res
-      .status(200)
-      .json({ message: 'Device updated successfully', device: updatedDevice })
+    return res.status(200).json({
+      message: 'Device updated successfully',
+      device: updatedDevice,
+    })
   } catch (error) {
-    console.error('Error updating device:', error.message || error)
-    res
-      .status(500)
-      .json({ message: 'Failed to update device', error: error.message })
+    console.error(
+      'Error updating device:',
+      error instanceof Error ? error.message : error
+    )
+    return res.status(500).json({
+      message: 'Failed to update device',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
   }
 }
 
-async function deleteDevice(req, res) {
+async function deleteDevice(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query
 
   if (!id) {
@@ -185,17 +229,30 @@ async function deleteDevice(req, res) {
   }
 
   try {
+    const existingDevice = await prisma.device.findUnique({
+      where: { id: String(id) },
+    })
+
+    if (!existingDevice) {
+      return res.status(404).json({ message: 'Device not found' })
+    }
+
     const deletedDevice = await prisma.device.delete({
       where: { id: String(id) },
     })
 
-    res
-      .status(200)
-      .json({ message: 'Device deleted successfully', device: deletedDevice })
+    return res.status(200).json({
+      message: 'Device deleted successfully',
+      device: deletedDevice,
+    })
   } catch (error) {
-    console.error('Error deleting device:', error.message || error)
-    res
-      .status(500)
-      .json({ message: 'Failed to delete device', error: error.message })
+    console.error(
+      'Error deleting device:',
+      error instanceof Error ? error.message : error
+    )
+    return res.status(500).json({
+      message: 'Failed to delete device',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
   }
 }

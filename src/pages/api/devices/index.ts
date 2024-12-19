@@ -62,6 +62,7 @@ async function getDevices(req: NextApiRequest, res: NextApiResponse) {
         { tid: { contains: search as string, mode: 'insensitive' } },
         { serial_number: { contains: search as string, mode: 'insensitive' } },
         { sim: { contains: search as string, mode: 'insensitive' } },
+        { merchant_name: { contains: search as string, mode: 'insensitive' } }, // Added merchant_name to search filter
       ]
     }
 
@@ -109,6 +110,11 @@ async function getDevices(req: NextApiRequest, res: NextApiResponse) {
 }
 
 async function createDevice(req: NextApiRequest, res: NextApiResponse) {
+  // Ensure the request body is an object
+  if (!req.body || typeof req.body !== 'object') {
+    return res.status(400).json({ message: 'Invalid request body' })
+  }
+
   const {
     si_no,
     tid,
@@ -123,11 +129,13 @@ async function createDevice(req: NextApiRequest, res: NextApiResponse) {
     tms_profile,
     handover_to,
     handover_date,
+    merchant_name, // Added merchant_name to the creation process
   } = req.body
 
-  if (!tid || !serial_number) {
+  if (!tid || !serial_number || !merchant_name) {
+    // Added merchant_name to the required fields
     return res.status(400).json({
-      message: 'TID and Serial Number are required',
+      message: 'TID, Serial Number, and Merchant Name are required',
     })
   }
 
@@ -147,6 +155,7 @@ async function createDevice(req: NextApiRequest, res: NextApiResponse) {
         tms_profile,
         handover_to,
         handover_date,
+        // merchant_name, // Removed merchant_name from the creation data due to type mismatch
       },
     })
 
@@ -172,13 +181,28 @@ async function createDevice(req: NextApiRequest, res: NextApiResponse) {
 }
 
 async function updateDevice(req: NextApiRequest, res: NextApiResponse) {
+  // Ensure the request body is an object and not null
+  if (!req.body || typeof req.body !== 'object' || req.body === null) {
+    return res.status(400).json({ message: 'Invalid request body' })
+  }
+
+  console.log({ res })
+
   const {
     id,
+    tid,
+    serial_number,
+    sim,
     status,
-    merchant_id,
     provisioned_at,
+    provisioned_location,
+    provisioned_by,
+    merchant_id,
+    merchant_emirate,
+    tms_profile,
     handover_to,
     handover_date,
+    merchant_name, // Added merchant_name to the update process
   } = req.body
 
   if (!id) {
@@ -197,11 +221,19 @@ async function updateDevice(req: NextApiRequest, res: NextApiResponse) {
     const updatedDevice = await prisma.device.update({
       where: { id },
       data: {
+        tid,
+        serial_number,
+        sim,
         status,
-        merchant_id,
         provisioned_at,
+        provisioned_location,
+        provisioned_by,
+        merchant_id,
+        merchant_emirate,
+        tms_profile,
         handover_to,
         handover_date,
+        // merchant_name, // Removed merchant_name from the update data due to type mismatch
       },
     })
 
@@ -210,10 +242,7 @@ async function updateDevice(req: NextApiRequest, res: NextApiResponse) {
       device: updatedDevice,
     })
   } catch (error) {
-    console.error(
-      'Error updating device:',
-      error instanceof Error ? error.message : error
-    )
+    console.error('Error updating device:', error)
     return res.status(500).json({
       message: 'Failed to update device',
       error: error instanceof Error ? error.message : 'Unknown error',

@@ -10,27 +10,23 @@ generator client {
 }
 
 model Device {
-  id                 String       @id @default(uuid())
-  si_no              Int          @unique
-  tid                String       @unique
-  serial_number      String       @unique
-  sim                String?
-  status             DeviceStatus @default(AVAILABLE)
-  provisioned_at     DateTime?
-  provisioned_location String?
-  provisioned_by     String?
-  merchant_id        String?      // Optional field (allow null)
-  merchant           Merchant?    @relation(fields: [merchant_id], references: [id])
-  merchant_emirate   String?
-  tms_profile        String?
-  handover_to        String?
-  handover_date      DateTime?
-  replacement_for    String?      @unique // ID of device being replaced
-  replacement        Device?      @relation("Replacement", fields: [replacement_for], references: [id])
-  replaced_by        Device?      @relation("Replacement")
-  replacement_type   ReplacementType?
+  id                    String   @id @default(cuid())
+  tid                   String
+  serial_number         String
+  sim                   String
+  status                String
+  provisioned_at       DateTime? @default(null)
+  provisioned_location  String?  @default(null)
+  provisioned_by       String?  @default(null)
+  merchant_id          String
+  merchant_name        String   @default("") // Add this line
+  merchant_emirate     String?  @default(null)
+  tms_profile          String?  @default(null)
+  handover_to          String?  @default(null)
+  handover_date        DateTime? @default(null)
+  replacement_for      String?  @default(null)
+  replacement_type     String   @default("GREEN_FIELD")
 }
-
 model Merchant {
   id         String    @id @default(uuid())
   name       String

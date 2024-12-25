@@ -1,0 +1,69 @@
+// Specify the datasource block that connects Prisma to your database
+datasource db {
+  provider = "postgresql"        // Set the database provider to PostgreSQL
+  url      = env("DATABASE_URL")  // Use the DATABASE_URL environment variable to fetch connection details
+}
+
+// Specify the client generator
+generator client {
+  provider = "prisma-client-js"  // Prisma client generation for JS/TS
+}
+
+// Define the Merchant model
+model Merchant {
+  id        Int       @id @default(autoincrement())
+  name      String
+  emirate   String
+  devices   Device[]  @relation("MerchantDevices")  // A merchant can have many devices
+}
+
+// Define the DeviceModel model
+model DeviceModel {
+  id           Int       @id @default(autoincrement())
+  model_name   String    // Model name of the device (e.g., "PAX Terminal X100")
+  devices      Device[]  @relation("DeviceModels")  // A device model can belong to many devices
+}
+
+// Define the Device model
+model Device {
+  id                  Int       @id @default(autoincrement())
+  tid                 String    // Terminal ID
+  serial_number       String    // Serial number of the device
+  sim                 String    // SIM card number
+  status              String    // Status of the device
+  provisioned_location String   // Provisioned location
+  provisioned_by      String    // Provisioned by person or entity
+  provisioned_at      DateTime  // Date of provisioning
+  handover_to         String    // Person to whom it is handed over
+  handover_date       DateTime  // Date of handover
+  merchant_id         Int       // Foreign key to the Merchant model
+  merchant_name       String    // Merchant Name
+  merchant_emirate    String?   // Merchant's Emirate
+  tms_profile         String    // Profile for the terminal management system
+  device_model_id     Int       // Foreign key to the DeviceModel model
+  merchant            Merchant  @relation("MerchantDevices", fields: [merchant_id], references: [id])
+  device_model        DeviceModel @relation("DeviceModels", fields: [device_model_id], references: [id])
+
+  @@index([merchant_id])
+  @@index([device_model_id])
+}
+
+// Define enumerations for device statuses
+enum DeviceStatus {
+  AVAILABLE
+  PROVISIONED
+  FAULTY
+  REASSIGNED
+}
+
+// Define enumerations for replacement type
+enum ReplacementType {
+  GREEN_FIELD
+  REPLACEMENT
+}
+
+enum DeviceModelEnum {
+  DROP_D920_PRO
+  X990
+  PAX
+}
